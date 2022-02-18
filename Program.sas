@@ -13,7 +13,7 @@ data datap.patient_data;
 	format sdate edate date9.;
 run;
 
-/*Exercise 2*/
+/*Import an Excel file*/
 proc import datafile="/home/u60819583/score_data.xlsx" out=scoreData dbms=xlsx 
 		replace;
 	getnames=yes;
@@ -27,7 +27,7 @@ data score.scoreData0;
 	set scoreData;
 run;
 
-/*Exercise 3*/
+/*Import an Excel file*/
 /*-- Import score_data_miss777 */
 proc import datafile="/home/u60819583/score_data_miss777.xlsx" out=miss_data0 
 		dbms=xlsx replace;
@@ -63,7 +63,7 @@ data scoredata1;
 	average_score=mean(score1, score2, score3);
 run;
 
-/* Grade */
+/* Compute a new variable : Grade */
 data scoredata1;
 	set scoredata1;
 
@@ -103,7 +103,7 @@ run;
 proc print data=scoredata1;
 run;
 
-/* Exercise 5 */
+/* New dataset */
 proc import datafile="/home/u60819583/Sale.xlsx" out=sale0 dbms=xlsx replace;
 	getnames=yes;
 run;
