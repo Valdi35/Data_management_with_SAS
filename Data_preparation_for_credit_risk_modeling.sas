@@ -555,4 +555,174 @@ run;
 -----------------------------------*/
 
 /* Stratified random sampling : Training and validation data sets */
+data loan_model;
+set score.loan_data_model;
+run;
+
+proc freq data=loan_model;
+tables bad;
+run;
+
+/* 0: 74% ; 1:26% */
+
+proc sort data=loan_model;
+by bad;
+run;
+
+proc surveyselect data=loan_model
+method=srs samprate=0.70 out=stratified_loan_data seed=12345 outall;
+strata bad;
+run;
+
+/*Method equal srs forequal probability of being selected without replacement*/
+
+/* TRAINING DATA*/
+data score.training_data;
+set stratified_loan_data;
+if selected=1;
+drop selected SamplingWeight SelectionProb;
+run;
+
+/*VALIDATION DATA*/
+data score.validation_data;
+set stratified_loan_data;
+if selected=0;
+drop selected SamplingWeight SelectionProb;
+run;
+
+/*Check if the srs is verified*/
+proc freq data=score.training_data;
+tables bad;
+title '70 percent sample of loan training data';
+run;
+
+proc freq data=score.validation_data;
+tables bad;
+title '30 percent sample of loan validation data';
+run;
+
+/*Distribution of target variable is the same as in 
+entire dataset*/
+
+/* Logistic regression with backward selection */
+proc logistic data=score.training_data;
+class res_clus (param=ref ref=first);
+class aes_clus (param=ref ref=first);
+model bad (Event= '1')= dainc doutm doutl doutcc age aes_clus res_clus
+/selection=backward slstay=0.1 details;
+store score.model1;
+run;
+/*Pr > Chisq = 0.93, on ne peut pas rejetter H0, le modèle
+est pertinent pour prédire la variable cible
+
+AIC = 984.249
+Predictors : dainc, age, doutcc and res_clus*/
+
+
+/*Logistic regression with forward selection*/
+proc logistic data=score.training_data;
+class res_clus (param=ref ref=first);
+class aes_clus (param=ref ref=first);
+model bad (Event= '1')= dainc doutm doutl doutcc age aes_clus res_clus
+/selection=forward slentry=0.1 details;
+store score.model2;
+run; 
+/*Pr > Chisq = 0.93, on ne peut pas rejetter H0, le modèle
+est pertinent pour prédire la variable cible
+
+AIC = 984.249	
+Predictors : doutm, doutl, aes_clus*/
+
+/*Logistic regression with stepwise selection*/
+proc logistic data=score.training_data;
+class res_clus (param=ref ref=first);
+class aes_clus (param=ref ref=first);
+model bad (Event= '1')= dainc doutm doutl doutcc age aes_clus res_clus
+/selection=stepwise slentry=0.1 slstay=0.1 details;
+store score.model3;
+run; 
+/*Same result as the model 1 */
+
+
+/*Predict on validation data*/
+proc plm restore=score.model3;
+score data=score.validation_data out=loan_predicted;
+run;
+
+data pred1;
+	set loan_predicted;
+	P_1 = exp(Predicted)/(1+exp(Predicted));
+	P_0 = 1 - P_1;
+run;
+
+/*Measure the model performance: Classification table */
+
+/* Hit rate : number of correctly classified
+
+error rate = 1 - hit rate
+
+sensitivity : proportion of positive cases correctly
+predicted to be positive (actual positive event)
+
+PV+ : proportion of predicted positive values 
+that will be positive
+
+Specificity : proportion of true negatives out of the
+ total number of actual negative values
+
+PV- : proportion of predicted negative values 
+that will be negative
+*/
+
+proc format;
+	value $target '0'='NO' '1'='YES';
+run;
+
+/*Cut-off value = 0.27*/
+proc logistic data=score.training_data;
+	class res_clus (param=ref ref=first);
+	class aes_clus (param=ref ref=first);
+	model bad (Event = '1') = dainc age doutcc res_clus
+	/ctable pprob=.27;
+	score data=score.validation_data out=pred_validation
+	outroc=rocvalidation;
+run;
+/* AUC = 0.6074 */
+
+/*Classification table*/
+proc freq data=pred_validation;
+	tables f_bad * i_bad/norow nocol;
+	format f_bad i_bad $target.;
+	title 'Classification table for loan validation data';
+run;
+
+
+/*Try different cut-off values to improve
+specificity and sensitivity*/
+
+/* ROC Curve */
+proc logistic data=score.training_data;
+	class res_clus (param=ref ref=first);
+	class aes_clus (param=ref ref=first);
+	model bad (Event = '1') = dainc age doutcc res_clus
+	/ctable pprob= 0.0 to 1.0 by 0.10;
+	score data= score.training_data outroc=roctrain;
+	score data= score.validation_data outroc=rocvalidation;
+run;
+
+/* AUC training = 0.6749
+AUC validation = 0.6074 */
+
+
+
+
+
+
+
+
+
+
+
+
+
 
