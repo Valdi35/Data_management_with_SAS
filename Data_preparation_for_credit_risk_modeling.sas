@@ -315,7 +315,7 @@ run;
 proc cluster data=prop_resBad method=ward outtree=treeinfo1
 plots=(dendrogram(vertical height=rsq));
 freq _freq_;
-var prop;
+var prop1;
 id res;
 format res $fres.;
 ods output clusterhistory=cluster1;
@@ -328,18 +328,18 @@ if _n_ = 1 then set chi;
 set cluster1;
 chisquare=_pchi_*rsquared;
 degfree=numberofclusters-1;
-logvalue=logsdf('CHISQ',chisquare,degfree);
+logpvalue=logsdf('CHISQ',chisquare,degfree);
 run;
 
 proc print data=cutoff;
-var numberofclusters Semipartialrsq rsqaured chisquare degfree logpvalue;
+var numberofclusters Semipartialrsq rsquared chisquare degfree logpvalue;
 title 'Log P-value information and the cluster history';
 run;
 
 proc sgplot data=cutoff;
 scatter y=logpvalue x=numberofclusters / markerattrs=(color=blue symbol=circlefilled);
 xaxis label="Number of Clusters";
-yaxis label="Log of P-value" min=-15 max=-5;
+yaxis label="Log of P-value" min=-10 max=-5;
 title "Plot of Log P-value by number of Clusters";
 run;
 
@@ -348,7 +348,7 @@ reduction of the original chi-square statistic*/
 
 proc sql;
 select numberofclusters into :ncl
-from cutoff having lopvalue=min(logpvalue);
+from cutoff having logpvalue=min(logpvalue);
 quit;
 run;
 
@@ -370,5 +370,189 @@ run;
 
 /*Create a new var with res clusters.
 An inspection of the target variable by the newly collapsed levels is warranted*/
+data loan_data3;
+	set loan_data2;
+	if res in ('O','F','U','P') then res_clus=1;
+	else if res in ('N') then res_clus=0;
+run;
 
+proc freq data=loan_data3;
+tables bad*res_clus/chisq;
+output out=chi (keep=_pchi_) chisq;
+run;
+/*Cramer V = -0.1083 */
+
+/* CLuster for applicants employments statuts */
+proc cluster data=prop_resBad2 method=ward outtree=treeinfo2
+plots=(dendrogram(vertical height=rsq));
+freq _freq_;
+var prop2;
+id aes;
+format aes $faes.;
+ods output clusterhistory=cluster1;
+title 'Results of Cluster Analysis on all credit history applicants employments statuts';
+run;
+
+data loan_data4;
+	set loan_data3;
+	if aes in ('B','M','E','T','P','V') then aes_clus = 1;
+	else if aes in ('N','W','R','U') then aes_clus= 0;
+run;
+
+/*CHI test for aes_clus */
+proc freq data=loan_data4;
+tables bad*aes_clus/chisq;
+output out=chi (keep=_pchi_) chisq;
+run;
+/* Il y a toujours une liaison entre les deux variables
+Seulement, le V de Cramer devient negatif  -0.1827 */
+
+/*------------------------------------------------- 
+Detect associationi within variables by proc corr
+-------------------------------------------------*/
+
+%let features = age nkid dep phon sinc aes_clus res_clus 
+dainc dhval dmort doutm douthp doutl doutcc;
+
+ods output spearmancorr=spearman hoeffdingcorr=hoeffding;
+
+proc corr data=loan_data4 spearman hoeffding rank;
+var &features;
+with bad;
+title 'Coefficients de correlation de Spearman et Hoeffding';
+run;
+
+proc print data=spearman; title 'ODS output de Spearman'; run;
+proc print data=hoeffding; title 'ODS output de hoeffding'; run;
+
+/*Convert Spearman and Hoeffding data to one dataset*/
+data spearmanrank (keep=variable scorr spvalue ranksp);
+length variable $25;
+set spearman;
+array best(*) best1 -- best14;
+array r(*) r1 -- r14; 
+array p(*) p1 -- p14;
+
+do i = 1 to 14;
+variable=best(i); scorr=r(i); spvalue=p(i); ranksp=i;
+output;
+end;
+run;
+
+data hoeffdingrank (keep=variable hcorr hpvalue rankhoeff);
+length variable $25;
+set hoeffding;
+array best(*) best1 -- best14;
+array r(*) r1 -- r14; 
+array p(*) p1 -- p14;
+
+do i = 1 to 14;
+variable=best(i); hcorr=r(i); hpvalue=p(i); rankhoeff=i;
+output;
+end;
+run;
+
+/* Sort and merge by variable */
+proc sort data=spearmanrank; by variable; run;
+proc sort data=hoeffdingrank; by variable; run;
+
+data final;
+merge spearmanrank hoeffdingrank;
+by variable;
+run;
+
+proc sort data=final;
+by ranksp;
+run;
+
+proc print data=final;
+var variable ranksp rankhoeff scorr spvalue hcorr hpvalue;
+title 'Spearman and Hoeffding D Correlation data sorted by Spearman rank';
+run;
+
+/* Si une variable a un coefficient de correlation (Spearman et Hoeffding)
+eleve, donc cette variable est fortement relie a la variable cible et sera
+retenu dans la modelisation, et vice-versa 
+
+Critere de selection : p-value < 0.05 
+
+Spearman : dainc aes_clus res_clus doutcc  doutm age  sinc*               
+Hoeffdinf : dainc */
+
+/* Plot des rangs de Spearman et Hoeffding pour determiner les variables a
+conserver. Si une variable se trouve sur la region en haut a droite ou a ses bordures
+elle doit etre elimine a cause de sa non relation a la variable cible.
+
+Si une variable a un rang de Hoeffding faible et un rang de Spearman eleve,
+cette variable a une relation non lineaire avec la variable cible.  */
+
+proc sgplot data=final;
+refline 8 / axis=y;
+refline 2 / axis=x;
+scatter y=ranksp x=rankhoeff / datalabel=variable;
+yaxis label = "Rank of Spearman Correlation";
+xaxis label = "Rank of Hoeffding Correlation";
+title 'Ranks of Spearman Correlations by Ranks of Hoeffding Correlations';
+run;
+
+/*Variables a conserver : dainc age
+Relations non lineaires : doutm aes_clus res_clus doutl doutcc*/
+
+data score.loan_data_model;
+set loan_data4;
+drop yob sinc nkid douthp dhval dmort phon dep;
+run;
+
+/* Detect non-linear association */
+%macro non_linear(score_var= );
+	proc rank data=score.loan_data_model groups=100 out=outrank; /*Groups=100 pour avoir des percentile*/
+	var &score_var;
+	ranks bin;
+	run;
+	
+	proc print data=outrank (obs=10);
+	var &score_var bin;
+	run;
+	
+	proc means data=outrank noprint nway n;
+	class bin;
+	var bad &score_var;
+	output out=bins sum(bad)=bad mean(&score_var)= &score_var;
+	run;
+	
+	proc sort data=bins;
+	by bin;
+	run;
+	
+	proc print data=bins;
+	run;
+	
+	data bins;
+	set bins;
+	elogit= log((bad+sqrt(_freq_)/2))/(_freq_ - bad + (sqrt(_freq_)/2));
+	run;
+	
+	/*Plot le elogit en fonction de doutm*/
+	proc sgplot data=bins;
+	reg y=elogit x=&score_var/degree=2;
+	series y=elogit x=&score_var;
+	title 'Empirical logit by variable';
+	run;
+%mend non_linear;
+
+%non_linear(score_var = doutm)
+%non_linear(score_var = doutl)
+%non_linear(score_var = doutcc);
+
+/* Exemple d'interpretation :
+	
+	Bin 43 : Parmi les 14 individus qui ont un montant d'hypotheque ou loyer
+	en moyenne de 90 dollar, 3 seulement ont fait defaut sur un credit bancaire */
+	
+	
+/*----------------------------------
+  MODELING : Logistic regression
+-----------------------------------*/
+
+/* Stratified random sampling : Training and validation data sets */
 
