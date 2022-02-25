@@ -713,7 +713,50 @@ run;
 /* AUC training = 0.6749
 AUC validation = 0.6074 */
 
+/*Gains and Lift charts */
 
+/* Gains : ability of the classifier to captures
+the true responders. Plot of PV+ by depth across
+all cutoff values. 
+
+depth = proportion of
+predicted positive observations out of the entire data set.
+Depth = (TP+FP)/n */
+
+data gains;
+	set rocvalidation;
+	cutoff=_prob_; pi1=0.26;
+	tp_prop = pi1*_sensit_; fp_prop = (1-pi1)*_1mspec_;
+	depth = tp_prop + fp_prop;
+	pv_plus = tp_prop / depth;
+	lift = pv_plus /pi1;
+run;
+
+proc print data=gains;
+	var cutoff pi1 _sensit_ _1mspec_ tp_prop fp_prop depth pv_plus lift;
+	title "Informations du gain pour les données de validation";
+run;
+
+proc sgplot data=gains;
+series y = pv_plus x = depth;
+refline pi1 /axis=y;
+refline 0.15/axis=x; /*Target the top 15 percent*/
+xaxis values=(0 to 1.0 by 0.10);
+yaxis values=(0.5 to 1.0 by 0.10);
+title "Gains pour les données de validation";
+run;
+
+/* Lift : ratio of the performance of the classifier
+to the performance obtained by chance 
+Lift = PV+ / pi1               */
+proc sgplot data=gains;
+series y = lift x = depth;
+refline pi1 /axis=y;
+refline 0.15/axis=x; /*Target the top 15 percent*/
+/*xaxis values=(0 to 1.0 by 0.10);
+yaxis values=(0.5 to 1.0 by 0.10)*/;
+title "Lift pour les données de validation";
+run;
 
 
 
