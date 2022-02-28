@@ -483,7 +483,7 @@ Hoeffdinf : dainc */
 conserver. Si une variable se trouve sur la region en haut a droite ou a ses bordures
 elle doit etre elimine a cause de sa non relation a la variable cible.
 
-Si une variable a un rang de Hoeffding faible et un rang de Spearman eleve,
+Si une variable a un rang de Hoeffding faible et un rang de Spearman élevé,
 cette variable a une relation non lineaire avec la variable cible.  */
 
 proc sgplot data=final;
@@ -495,7 +495,7 @@ xaxis label = "Rank of Hoeffding Correlation";
 title 'Ranks of Spearman Correlations by Ranks of Hoeffding Correlations';
 run;
 
-/*Variables a conserver : dainc age
+/*Variables à conserver : dainc age
 Relations non lineaires : doutm aes_clus res_clus doutl doutcc*/
 
 data score.loan_data_model;
@@ -546,7 +546,7 @@ run;
 
 /* Exemple d'interpretation :
 	
-	Bin 43 : Parmi les 14 individus qui ont un montant d'hypotheque ou loyer
+	Bin 43 : Parmi les 14 individus qui ont des dépenses d'hypothèques ou loyers
 	en moyenne de 90 dollar, 3 seulement ont fait defaut sur un credit bancaire */
 	
 	
@@ -574,7 +574,7 @@ method=srs samprate=0.70 out=stratified_loan_data seed=12345 outall;
 strata bad;
 run;
 
-/*Method equal srs forequal probability of being selected without replacement*/
+/*Method equal srs for equal probability of being selected without replacement*/
 
 /* TRAINING DATA*/
 data score.training_data;
@@ -711,7 +711,33 @@ proc logistic data=score.training_data;
 run;
 
 /* AUC training = 0.6749
-AUC validation = 0.6074 */
+AUC validation = 0.6074 
+Pouvoir de discrimination faible.*/
+
+/* Interprétation des résultats du modèle :
+
+Un odds ratio est un rapport de cote des probabilités,
+ici, c'est le rapport des côtes des probabilités
+de faire défaut sur un crédit sur la probabilité de ne
+pas faire défaut (odds-ratio>0)   
+
+Résultats valable pour cette échantillon :
+
+- dainc : Une hausse du revenu du demandeur de crédit 
+diminue sa probabilité de faire défaut de 0.003%. OR=1, la
+cote d'un évenement de défaut est identique pour les différents
+profils de revenus. (très faible)
+
+- age : Une hausse de l'âge à un effet positif sur la probabilité de faire défaut, 
+quand le demandeur prends une année de plus, sa probabilité de faire défaut augmente.
+La cote de faire défaut augmente de 1.019 lorsque l'âge augmente d'une unité.
+
+- doutcc : L'augmentation des dépenses sur la carte de crédit a un effet négatif
+sur l'augmentation de la probabilité de défaut.
+
+- res_clus : Le fait d'être logé (propriétaire, location meublé et non meublé,
+chez les parents) est associé à moins de risque de faire défaut que lorsque
+la situation residentielle n'est pas indiquée. OR<1*/
 
 /*Gains and Lift charts */
 
@@ -749,6 +775,7 @@ run;
 /* Lift : ratio of the performance of the classifier
 to the performance obtained by chance 
 Lift = PV+ / pi1               */
+
 proc sgplot data=gains;
 series y = lift x = depth;
 refline pi1 /axis=y;
@@ -757,15 +784,3 @@ refline 0.15/axis=x; /*Target the top 15 percent*/
 yaxis values=(0.5 to 1.0 by 0.10)*/;
 title "Lift pour les données de validation";
 run;
-
-
-
-
-
-
-
-
-
-
-
-
