@@ -59,11 +59,12 @@ proc import datafile="/home/u60819583/SAS Modeling Code/Loan_data.xlsx" out=loan
 	getnames = yes;
 run;
 
+/* Sort by the target*/
 proc sort data = loan_data out=loan_data0;
 by bad;
 run;
 
-
+/*Replace some missings values by zero in dhval & dmort*/
 data loan_data00 (drop=i);
 	set loan_data0;
 	array dh(2) dhval dmort;
@@ -80,7 +81,7 @@ data loan_data000 (drop=i);
 		if dh(i) = 'Z' then dh(i) = 'N';
 	end;
 	yob = 1900 + yob;
-	age = 2002 - yob;
+	age = 2002 - yob; /*Data was collected in 2002*/
 run;
 
 /* Not selet where yob == 99*/
@@ -97,30 +98,35 @@ proc stdize data=loan_data1
 	by bad;
 run;
 
-proc print data=loan_data1;
-title "Loan data";
-run;
+/*----------------------- 
 
-/* Descriptive statistics */
+Descriptive statistics 
+
+------------------------*/
 proc freq data=score.loan_data1;
 table bad;
 run;
 
 /*73% of clients have a good credit history, while 27% have not.
-Good credit are over-represented */
+Bad credit are under-represented */
 
 proc univariate data=score.loan_data1;
 class bad;
 run;
 
-/*Analysis of variance*/
+/*-----------------------------------------------------------------
 
-/*Testing the equal variance assumption of bad and good credit*/
+					Analysis of variance
+
+Testing the equal variance assumption of bad and good credit
 
 
-/* Test the normality assumption 
+Test the normality assumption 
 Dependent variable : bad
-H0 : u0 = u1 versus H1: u0 # u1 */
+H0 : u0 = u1 versus H1: u0 # u1 
+
+-----------------------------------------------------------------*/
+
 proc ttest data=score.loan_data1 plots (only)=qq alpha=.05 h0=0;
 class bad;
 title 'Independent samples t-test for mean differences';
@@ -206,7 +212,7 @@ proc glm data=score.loan_data1;
 run;
 
 /*There are no differences between the 
-differents types of residential status*/
+differents types of residential status on outgoings on loans*/
 
 /* if p-value is < 0.05, h0 is rejecting 
 
@@ -244,17 +250,23 @@ proc sql;
 	where doutl < 25000;
 quit;
 
-/* Praparation of inputs for modelling */
+/*-------------------------------------------------------------
+ 			Praparation of inputs for modelling
 
-/* Categorical input : aes, res
+Categorical input : aes, res
 
 Greenacre method :
 Collapse categorical variable that have
-the same proportions of levels in the target variable BAD*/
+the same proportions of levels in the target variable BAD
+
+---------------------------------------------------------------*/
+
+/*pearson Chi-square statistics*/
+
+/* By residential statuts*/
 
 proc freq data=loan_data2;
 tables bad*res/chisq;
-/*pearson Chi-square statistics*/
 output out=chi (keep=_pchi_) chisq;
 run;
 
@@ -262,13 +274,17 @@ proc print data=chi;
 title 'Chi-square for credit history by residential statuts';
 run;
 
-/*H0 : independance, absence de lien statistique
-  H1 : Liaison entre les deux variables
-  Si p_value <= 0.05, on rejette H0 */
+/*
+H0 : independance, absence de lien statistique
+H1 : Liaison entre les deux variables
+Si p_value <= 0.05, on rejette H0 
+*/
  
-/* Il existe un lien statistique entre le statut residentiel et
+/* 
+Il existe un lien statistique entre le statut residentiel et
 l'evenement de defaut sur un credit 
-V de Cramer = 0.11, liaison faible*/
+V de Cramer = 0.11, liaison faible
+*/
 
 proc means data=loan_data2 noprint nway maxdec=3;
 class res;
@@ -286,7 +302,6 @@ run;
 
 proc freq data=loan_data2;
 tables bad*aes/chisq;
-/*pearson Chi-square statistics*/
 output out=chi2 (keep=_pchi_) chisq;
 run;
 
@@ -294,9 +309,11 @@ proc print data=chi2;
 title 'Chi-square for credit history by applicants employements statuts';
 run;
 
-/* Il existe un lien statistique entre la categorie professionnelle et
+/* 
+Il existe un lien statistique entre la categorie professionnelle et
 l'evenement de defaut sur un credit 
-V de Cramer = 0.18, liaison faible*/
+V de Cramer = 0.18, liaison faible
+*/
 
 proc means data=loan_data2 noprint nway maxdec=3;
 class aes;
@@ -414,8 +431,21 @@ Detect associationi within variables by proc corr
 %let features = age nkid dep phon sinc aes_clus res_clus 
 dainc dhval dmort doutm douthp doutl doutcc;
 
-ods output spearmancorr=spearman hoeffdingcorr=hoeffding;
+/*
+Corrélation de spearman : mesure de dépendance statistique
+non paramétrique entre deux variables, elle étudie la relation 
+entre ces deux dernières sont que leur relation soit de type afffine.
+Se base sur les rangs des valeurs. 
+Permet de détecter la monotonie de la relation [-1, +1].
 
+Hoeffding's D : mesure l'indépendance en comparant la distribution
+de x et y, et la distribution jointe de x et y.
+
+
+
+*/
+
+ods output spearmancorr=spearman hoeffdingcorr=hoeffding;
 proc corr data=loan_data4 spearman hoeffding rank;
 var &features;
 with bad;
@@ -476,10 +506,10 @@ retenu dans la modelisation, et vice-versa
 
 Critere de selection : p-value < 0.05 
 
-Spearman : dainc aes_clus res_clus doutcc  doutm age  sinc*               
-Hoeffdinf : dainc */
+Spearman : dainc aes_clus res_clus doutcc  doutm age  sinc               
+Hoeffdinf : dainc
 
-/* Plot des rangs de Spearman et Hoeffding pour determiner les variables a
+Plot des rangs de Spearman et Hoeffding pour determiner les variables a
 conserver. Si une variable se trouve sur la region en haut a droite ou a ses bordures
 elle doit etre elimine a cause de sa non relation a la variable cible.
 
@@ -540,36 +570,36 @@ run;
 	run;
 %mend non_linear;
 
-%non_linear(score_var = doutm)
-%non_linear(score_var = doutl)
+%non_linear(score_var = doutm);
+%non_linear(score_var = doutl);
 %non_linear(score_var = doutcc);
 
 /* Exemple d'interpretation :
 	
-	Bin 43 : Parmi les 14 individus qui ont des dépenses d'hypothèques ou loyers
-	en moyenne de 90 dollar, 3 seulement ont fait defaut sur un credit bancaire */
+Bin 43 : Parmi les 14 individus qui ont des dépenses d'hypothèques ou loyers
+en moyenne de 90 dollar, 3 seulement ont fait defaut sur un credit bancaire 
 	
-	
-/*----------------------------------
+----------------------------------
   MODELING : Logistic regression
------------------------------------*/
+-----------------------------------
 
-/* Stratified random sampling : Training and validation data sets */
+Stratified random sampling : Training and validation data sets*/
+
 data loan_model;
 set score.loan_data_model;
 run;
-
-proc freq data=loan_model;
-tables bad;
-run;
-
-/* 0: 74% ; 1:26% */
 
 proc sort data=loan_model;
 by bad;
 run;
 
-proc surveyselect data=loan_model
+/*Standardize data*/
+proc stdize data = loan_model out= loan_modell method=std;
+by bad;
+var dainc doutm doutl doutcc age;
+run;
+
+proc surveyselect data=loan_modell
 method=srs samprate=0.70 out=stratified_loan_data seed=12345 outall;
 strata bad;
 run;
@@ -590,7 +620,7 @@ if selected=0;
 drop selected SamplingWeight SelectionProb;
 run;
 
-/*Check if the srs is verified*/
+/*Check if the srs is verified */
 proc freq data=score.training_data;
 tables bad;
 title '70 percent sample of loan training data';
@@ -612,14 +642,14 @@ model bad (Event= '1')= dainc doutm doutl doutcc age aes_clus res_clus
 /selection=backward slstay=0.1 details;
 store score.model1;
 run;
-/*Pr > Chisq = 0.93, on ne peut pas rejetter H0, le modèle
+/*Pr > Chisq = 0.4453, on ne peut pas rejetter H0, le modèle
 est pertinent pour prédire la variable cible
 
 AIC = 984.249
-Predictors : dainc, age, doutcc and res_clus*/
+Predictors : dainc, age, aes_clus and res_clus*/
 
 
-/*Logistic regression with forward selection*/
+/*Logistic regression with forward selection */
 proc logistic data=score.training_data;
 class res_clus (param=ref ref=first);
 class aes_clus (param=ref ref=first);
@@ -627,11 +657,12 @@ model bad (Event= '1')= dainc doutm doutl doutcc age aes_clus res_clus
 /selection=forward slentry=0.1 details;
 store score.model2;
 run; 
-/*Pr > Chisq = 0.93, on ne peut pas rejetter H0, le modèle
+
+/*Pr > Chisq = 0.4453, on ne peut pas rejetter H0, le modèle
 est pertinent pour prédire la variable cible
 
 AIC = 984.249	
-Predictors : doutm, doutl, aes_clus*/
+Predictors : dainc, age, aes_clus and res_clus*/
 
 /*Logistic regression with stepwise selection*/
 proc logistic data=score.training_data;
@@ -682,12 +713,12 @@ run;
 proc logistic data=score.training_data;
 	class res_clus (param=ref ref=first);
 	class aes_clus (param=ref ref=first);
-	model bad (Event = '1') = dainc age doutcc res_clus
+	model bad (Event = '1') = dainc age aes_clus res_clus
 	/ctable pprob=.27;
 	score data=score.validation_data out=pred_validation
 	outroc=rocvalidation;
 run;
-/* AUC = 0.6074 */
+/* AUC = 0.6279 */
 
 /*Classification table*/
 proc freq data=pred_validation;
@@ -700,18 +731,18 @@ run;
 /*Try different cut-off values to improve
 specificity and sensitivity*/
 
-/* ROC Curve */
+/* ROC Curve*/
 proc logistic data=score.training_data;
 	class res_clus (param=ref ref=first);
 	class aes_clus (param=ref ref=first);
-	model bad (Event = '1') = dainc age doutcc res_clus
+	model bad (Event = '1') = dainc age aes_clus res_clus
 	/ctable pprob= 0.0 to 1.0 by 0.10;
 	score data= score.training_data outroc=roctrain;
 	score data= score.validation_data outroc=rocvalidation;
 run;
 
-/* AUC training = 0.6749
-AUC validation = 0.6074 
+/* AUC training = 0.6302
+AUC validation = 0.6279
 Pouvoir de discrimination faible.*/
 
 /* Interprétation des résultats du modèle :
@@ -723,21 +754,6 @@ pas faire défaut (odds-ratio>0)
 
 Résultats valable pour cette échantillon :
 
-- dainc : Une hausse du revenu du demandeur de crédit 
-diminue sa probabilité de faire défaut de 0.003%. OR=1, la
-cote d'un évenement de défaut est identique pour les différents
-profils de revenus. (très faible)
-
-- age : Une hausse de l'âge à un effet positif sur la probabilité de faire défaut, 
-quand le demandeur prends une année de plus, sa probabilité de faire défaut augmente.
-La cote de faire défaut augmente de 1.019 lorsque l'âge augmente d'une unité.
-
-- doutcc : L'augmentation des dépenses sur la carte de crédit a un effet négatif
-sur l'augmentation de la probabilité de défaut.
-
-- res_clus : Le fait d'être logé (propriétaire, location meublé et non meublé,
-chez les parents) est associé à moins de risque de faire défaut que lorsque
-la situation residentielle n'est pas indiquée. OR<1*/
 
 /*Gains and Lift charts */
 
